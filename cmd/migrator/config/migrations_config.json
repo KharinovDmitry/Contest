@@ -1,0 +1,4 @@
+{
+  "storage_path":"postgres://postgres:qwerty@db:5432/contest?sslmode=disable",
+  "migrations_path":"cmd/migrator/migrations"
+}
