@@ -24,19 +24,20 @@ func NewCompileSevice() *CompileService {
 }
 
 func (c *CompileService) CompileCPP(code string) (string, error) {
-	fileName := time.Now().GoString()
+	fileName := time.Now().String()
 	file, err := os.Create(fileName + ".cpp")
+	defer file.Close()
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+
 	file.WriteString(code)
 
 	cmd := exec.Command("g++", "-o", fileName+".exe", "-x", "c++", fileName+".cpp")
 	err = cmd.Run()
 
 	if err != nil {
-		return "", fmt.Errorf("In CompileService(CompileCPP): %w", CompileError)
+		return "", fmt.Errorf("%w: %w", CompileError, err.Error())
 	}
 
 	cmd = exec.Command("chmod", "+x", fileName+".exe")

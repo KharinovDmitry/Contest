@@ -27,6 +27,7 @@ func NewStorage(connStr string) (*Storage, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	testRepository := postgres.NewTestRepository(db)
 
 	return &Storage{

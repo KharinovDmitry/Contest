@@ -27,6 +27,9 @@ func (r *TestRepository) AddItem(item Test) error {
 func (r *TestRepository) DeleteItem(id int) error {
 	_, err := r.db.Exec("DELETE from tests where id=$1", id)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
 		err = fmt.Errorf("In TestRepository(DeleteItem): %w", err)
 	}
 	return err
@@ -36,6 +39,9 @@ func (r *TestRepository) UpdateItem(id int, newItem Test) error {
 	_, err := r.db.Exec("UPDATE tests SET id=$1,task_id=$2, input=$3, expected_result=$4, points=$5 WHERE id=$6",
 		newItem.ID, newItem.TaskID, newItem.Input, newItem.ExpectedResult, newItem.Points, id)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
 		err = fmt.Errorf("In TestRepository(UpdateItem): %w", err)
 	}
 	return err
