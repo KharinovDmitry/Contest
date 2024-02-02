@@ -1,33 +1,12 @@
 package main
 
 import (
-	"Contest/internal/app"
-	. "Contest/internal/domain"
-	"context"
-	"github.com/joho/godotenv"
-	"github.com/sethvargo/go-envconfig"
-	"log"
+	"contest/internal/app"
+	"contest/internal/config"
 )
 
-func init() {
-	if err := godotenv.Load(); err != nil {
-		log.Fatal("No .env file found")
-	}
-}
-
 func main() {
-	cfg := MustLoadConfig()
+	cfg := config.MustLoadAppConfig()
 	application := app.New(cfg)
 	application.MustRun()
-}
-
-func MustLoadConfig() *Config {
-	cfg := &Config{}
-
-	err := envconfig.Process(context.Background(), cfg)
-	if err != nil {
-		panic("Load Config error: " + err.Error())
-	}
-
-	return cfg
 }

@@ -1,9 +1,9 @@
 package domain
 
 type Test struct {
-	ID             int    `json:"id,string"`
-	TaskID         int    `json:"taskID,string"`
-	Input          string `json:"input"`
-	ExpectedResult string `json:"expectedResult"`
-	Points         int    `json:"points,string"`
+	ID             int
+	TaskID         int
+	Input          string
+	ExpectedResult string
+	Points         int
 }

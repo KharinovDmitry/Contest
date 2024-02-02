@@ -1,11 +1,7 @@
 package domain
 
-import (
-	"Contest/internal/enums"
-)
-
 type TestsResult struct {
-	ResultCode  enums.TestResultCode
+	ResultCode  TestResultCode
 	Description string
 	Points      int
 }

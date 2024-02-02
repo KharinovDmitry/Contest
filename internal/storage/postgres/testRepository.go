@@ -1,23 +1,26 @@
 package postgres
 
 import (
-	. "Contest/internal/domain"
+	. "contest/internal/domain"
+	"contest/internal/storage"
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 )
 
 type TestRepository struct {
-	db *sql.DB
+	logger *slog.Logger
+	db     *sql.DB
 }
 
 func NewTestRepository(db *sql.DB) *TestRepository {
 	return &TestRepository{db: db}
 }
 
-func (r *TestRepository) AddItem(item Test) error {
-	_, err := r.db.Exec("INSERT INTO tests(id, task_id, input, expected_result, points) VALUES ($1, $2, $3, $4, $5)",
-		item.ID, item.TaskID, item.Input, item.ExpectedResult, item.Points)
+func (r *TestRepository) AddItem(taskID int, input string, expectedResult string, points int) error {
+	_, err := r.db.Exec("INSERT INTO tests(task_id, input, expected_result, points) VALUES ($1, $2, $3, $4)",
+		taskID, input, expectedResult, points)
 	if err != nil {
 		err = fmt.Errorf("In TestRepository(AddItem): %w", err)
 	}
@@ -25,14 +28,19 @@ func (r *TestRepository) AddItem(item Test) error {
 }
 
 func (r *TestRepository) DeleteItem(id int) error {
-	_, err := r.db.Exec("DELETE from tests where id=$1", id)
+	rows, err := r.db.Exec("DELETE from tests where id=$1", id)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
-		}
 		err = fmt.Errorf("In TestRepository(DeleteItem): %w", err)
+		return err
 	}
-	return err
+	if count, err := rows.RowsAffected(); count == 0 {
+		if err != nil {
+			err = fmt.Errorf("In TestRepository(DeleteItem): %w", err)
+			return err
+		}
+		return storage.ErrNotFound
+	}
+	return nil
 }
 
 func (r *TestRepository) UpdateItem(id int, newItem Test) error {
@@ -40,21 +48,22 @@ func (r *TestRepository) UpdateItem(id int, newItem Test) error {
 		newItem.ID, newItem.TaskID, newItem.Input, newItem.ExpectedResult, newItem.Points, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
+			return storage.ErrNotFound
 		}
 		err = fmt.Errorf("In TestRepository(UpdateItem): %w", err)
+		return err
 	}
-	return err
+	return nil
 }
 
 func (r *TestRepository) GetTable() ([]Test, error) {
-	rows, err := r.db.Query("SELECT * FROM tests")
+	rows, err := r.db.Query("SELECT id, task_id, input, expected_result, points FROM tests")
 	if err != nil {
 		return nil, fmt.Errorf("In TestRepository(GetTable): %w", err)
 	}
 	defer rows.Close()
 
-	tests := make([]Test, 0) //??
+	var tests []Test
 	for rows.Next() {
 		var test Test
 		err = rows.Scan(&test.ID, &test.TaskID, &test.Input, &test.ExpectedResult, &test.Points)
@@ -67,15 +76,12 @@ func (r *TestRepository) GetTable() ([]Test, error) {
 }
 
 func (r *TestRepository) FindItemByID(id int) (Test, error) {
-	row := r.db.QueryRow("SELECT * FROM tests WHERE id = $1", id)
-	if row.Err() != nil {
-		return Test{}, fmt.Errorf("In TestRepository(FindItemByID): %w", row.Err())
-	}
+	row := r.db.QueryRow("SELECT id, task_id, input, expected_result, points FROM tests WHERE id = $1", id)
 	var test Test
 	err := row.Scan(&test.ID, &test.TaskID, &test.Input, &test.ExpectedResult, &test.Points)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			err = ErrNotFound
+			err = storage.ErrNotFound
 		}
 		err = fmt.Errorf("In TestRepository(FindItemByID): %w", err)
 	}
@@ -88,7 +94,7 @@ func (r *TestRepository) FindItemByCondition(condition func(item Test) bool) (Te
 		return Test{}, fmt.Errorf("In TestRepository(FindItemByCondition): %w", err)
 	}
 	if len(items) == 0 {
-		return Test{}, ErrNotFound
+		return Test{}, storage.ErrNotFound
 	}
 	return items[0], nil
 }
@@ -98,7 +104,7 @@ func (r *TestRepository) FindItemsByCondition(condition func(item Test) bool) ([
 	if err != nil {
 		return nil, fmt.Errorf("In TestRepository(FindItemsByCondition): %w", err)
 	}
-	res := make([]Test, 0) //???
+	var res []Test
 	for _, test := range table {
 		if condition(test) {
 			res = append(res, test)

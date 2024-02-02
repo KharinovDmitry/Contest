@@ -1,59 +1,106 @@
 package app
 
 import (
-	. "Contest/internal/domain"
-	"Contest/internal/server/handlers"
-	"Contest/internal/services"
-	"Contest/internal/storage"
+	"contest/internal/compiler"
+	"contest/internal/compiler/linux"
+	"contest/internal/config"
+	"contest/internal/server/handlers"
+	"contest/internal/server/middleware"
+	"contest/internal/services"
+	"contest/internal/storage"
+	"contest/internal/storage/postgres"
+	"errors"
 	"fmt"
 	"github.com/gorilla/mux"
+	"log/slog"
 	"net/http"
+	"os"
 )
 
 type App struct {
-	port           int
-	router         *mux.Router
-	store          *storage.Storage
-	compileService services.ICompileService
-	testService    services.ITestService
+	port        int
+	router      *mux.Router
+	store       *storage.Storage
+	logger      *slog.Logger
+	compiler    compiler.Compiler
+	testService services.ITestService
 }
 
-func New(cfg *Config) *App {
-	router := mux.NewRouter()
+func New(cfg *config.Config) *App {
+	logger, err := setupLogger(cfg.Env)
+	if err != nil {
+		panic(err)
+	}
+	logger.Info("Логер запущен")
 
-	store, err := storage.NewStorage(cfg.ConnStr)
+	router := mux.NewRouter()
+	router.Use(middleware.AuthMiddleware(cfg.ApiKey))
+
+	store, err := postgres.NewStorage(cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresDB)
 	if err != nil {
 		panic(err)
 	}
 
-	compileService := services.NewCompileSevice()
-	testService := services.NewTestService(compileService, store.TestRepository)
+	linuxCompiler := linux.NewLinuxCompiler()
+	testService := services.NewTestService(linuxCompiler, store.TestRepository)
 
 	app := &App{
-		port:           cfg.Port,
-		router:         router,
-		store:          store,
-		compileService: compileService,
-		testService:    testService,
+		port:        cfg.Port,
+		router:      router,
+		store:       store,
+		logger:      logger,
+		compiler:    linuxCompiler,
+		testService: testService,
 	}
 	app.setupRouter()
 
+	logger.Info("Приложение собрано")
 	return app
 }
 
 func (a *App) setupRouter() {
-	compileSubrouter := a.router.PathPrefix("/compile").Subrouter()
-	compileSubrouter.HandleFunc("/cpp", handlers.CompileCPP(a.compileService)).Methods("POST")
-
-	a.router.HandleFunc("/test", handlers.RunTest(a.testService)).Methods("GET")
+	a.router.HandleFunc("/test", handlers.RunTest(a.testService, a.logger)).Methods("GET")
 
 	crudSubrouter := a.router.PathPrefix("/crud").Subrouter()
-	crudSubrouter.HandleFunc("/test", handlers.AddTest(a.testService)).Methods("PUT")
-	crudSubrouter.HandleFunc("/test/{id}", handlers.DeleteTest(a.testService)).Methods("DELETE")
-	crudSubrouter.HandleFunc("/test/{id}", handlers.UpdateTest(a.testService)).Methods("PATCH")
-	crudSubrouter.HandleFunc("/test/{id}", handlers.GetTest(a.testService)).Methods("GET")
-	crudSubrouter.HandleFunc("/tests", handlers.GetTests(a.testService)).Methods("GET")
-	crudSubrouter.HandleFunc("/tests/{task_id}", handlers.GetTestsByTaskID(a.testService)).Methods("GET")
+	crudSubrouter.HandleFunc("/test", handlers.AddTest(a.testService, a.logger)).Methods("PUT")
+	crudSubrouter.HandleFunc("/test/{id}", handlers.DeleteTest(a.testService, a.logger)).Methods("DELETE")
+	crudSubrouter.HandleFunc("/test/{id}", handlers.UpdateTest(a.testService, a.logger)).Methods("PATCH")
+	crudSubrouter.HandleFunc("/test/{id}", handlers.GetTest(a.testService, a.logger)).Methods("GET")
+	crudSubrouter.HandleFunc("/tests", handlers.GetTests(a.testService, a.logger)).Methods("GET")
+	crudSubrouter.HandleFunc("/tests/{task_id}", handlers.GetTestsByTaskID(a.testService, a.logger)).Methods("GET")
+}
+
+func setupLogger(env string) (*slog.Logger, error) {
+	switch env {
+	case "local":
+		return slog.New(slog.NewTextHandler(
+			os.Stdout,
+			&slog.HandlerOptions{
+				Level: slog.LevelDebug,
+			})), nil
+	case "dev":
+		file, err := os.OpenFile("app_logs", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0666)
+		if err != nil {
+			return nil, err
+		}
+		return slog.New(slog.NewTextHandler(
+			file,
+			&slog.HandlerOptions{
+				Level: slog.LevelDebug,
+			})), nil
+	case "prod":
+		file, err := os.OpenFile("app_logs", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0666)
+		if err != nil {
+			return nil, err
+		}
+		return slog.New(slog.NewTextHandler(
+			file,
+			&slog.HandlerOptions{
+				Level: slog.LevelInfo,
+			})), nil
+	default:
+		return nil, errors.New("Unknown ENV: " + env)
+	}
 }
 
 func (a *App) MustRun() {

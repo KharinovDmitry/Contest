@@ -1,23 +1,38 @@
 package services
 
 import (
-	. "Contest/internal/domain"
-	"Contest/internal/enums"
-	"Contest/internal/storage"
-	"Contest/internal/storage/postgres"
+	"contest/internal/compiler"
+	. "contest/internal/domain"
+	"contest/internal/storage"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
+	"unsafe"
+)
+
+const (
+	memoryLimitInKB = 1024
+	timeLimit       = 1 * time.Second
+)
+
+var (
+	ProgramError         = errors.New("Program error")
+	TimeLimitError       = errors.New("Time limit error")
+	UnknownLanguageError = errors.New("Unknown language")
+	TestsNotFoundError   = errors.New("Tests not found")
+	ErrNotFound          = errors.New("Not found in database")
 )
 
 type ITestService interface {
-	RunTest(taskID int, language enums.Language, code string) (TestsResult, error)
+	RunTest(taskID int, language Language, code string) (TestsResult, error)
 	GetTest(id int) (Test, error)
-	AddTest(test Test) error
+	AddTest(taskID int, input string, expectedResult string, points int) error
 	DeleteTest(id int) error
 	UpdateTest(id int, newTest Test) error
 	GetTests() ([]Test, error)
@@ -25,98 +40,95 @@ type ITestService interface {
 }
 
 type TestService struct {
-	compileService ICompileService
+	logger         *slog.Logger
+	compileService compiler.Compiler
 	testRepository storage.Repository[Test]
 }
 
-var (
-	ProgramError         = errors.New("Program error")
-	TimeLimitError       = errors.New("Time limit error")
-	UnknownLanguageError = errors.New("Unknown language")
-	TestsNotFoundError   = errors.New("Tests not found")
-)
-
-func NewTestService(compileService ICompileService, testRepository storage.Repository[Test]) *TestService {
+func NewTestService(compileService compiler.Compiler, testRepository storage.Repository[Test]) *TestService {
 	return &TestService{
 		compileService: compileService,
 		testRepository: testRepository,
 	}
 }
 
-func (s *TestService) RunTest(taskID int, language enums.Language, code string) (TestsResult, error) {
+func (s *TestService) RunTest(taskID int, language Language, code string) (TestsResult, error) {
 	var fileName string
 	var err error
 
 	switch language {
-	case enums.CPP:
+	case CPP:
 		fileName, err = s.compileService.CompileCPP(code)
-	case enums.CSharp:
-		panic("IMPLEMENT ME PLEASE")
-	case enums.Python:
-		panic("GIVE ME DIE PLEASE!")
 	default:
-		return TestsResult{}, UnknownLanguageError
+		return TestsResult{}, fmt.Errorf("%w: %s", UnknownLanguageError, language)
 	}
 	if err != nil {
 		return TestsResult{}, fmt.Errorf("In TestService(RunTest): %w", err)
 	}
 
+	return s.RunTestOnFile(fileName, taskID, true)
+}
+
+func (s *TestService) RunTestOnFile(fileName string, taskID int, deleteAfter bool) (TestsResult, error) {
 	file, err := os.Open(fileName)
-	defer os.Remove(fileName)
+	if deleteAfter {
+		defer func() {
+			err := os.Remove(fileName)
+			if err != nil {
+				s.logger.Error(fmt.Sprintf("File not deleted: " + err.Error()))
+			}
+		}()
+	}
 	defer file.Close()
 	if err != nil {
-		return TestsResult{}, fmt.Errorf("In TestService(RunTest): %w", err)
+		return TestsResult{}, fmt.Errorf("In TestService(RunTestOnFile): %w", err)
 	}
 
 	tests, err := s.testRepository.FindItemsByCondition(func(item Test) bool {
 		return item.TaskID == taskID
 	})
+	if err != nil {
+		return TestsResult{}, fmt.Errorf("In TestService(RunTestOnFile'): %w", err)
+	}
 
 	if len(tests) == 0 {
 		return TestsResult{}, TestsNotFoundError
 	}
 
-	if err != nil {
-		return TestsResult{}, fmt.Errorf("In TestService(RunTest): %w", err)
-	}
-
-	points := 0
+	var points int
 	for _, test := range tests {
-		timeout := time.Millisecond * 10000 //TODO
-		maxMemoryKB := 1024 * 1024          //TODO
+		timeout := timeLimit
+		maxMemoryKB := memoryLimitInKB
 		output, err := runCompiledCodeWithInput(fileName, test.Input, timeout, maxMemoryKB)
 		if err != nil {
 			if errors.Is(err, TimeLimitError) {
 				return TestsResult{
-					ResultCode:  enums.TimeLimit,
-					Description: "",
-					Points:      points,
+					ResultCode: TimeLimitCode,
+					Points:     points,
 				}, nil
-			} else if errors.Is(err, ProgramError) {
+			}
+			if errors.Is(err, ProgramError) {
 				return TestsResult{
-					ResultCode:  enums.RuntimeError,
+					ResultCode:  RuntimeErrorCode,
 					Description: fmt.Sprintf("Error Info: %s Output: %s", err.Error(), output),
 					Points:      points,
 				}, nil
-			} else {
-				return TestsResult{}, fmt.Errorf("In TestService(RunTests): %w")
 			}
+			return TestsResult{}, fmt.Errorf("In TestService(RunTests): %w", err)
 		}
-		if output == test.ExpectedResult {
-			points += test.Points
-		} else {
+		if output != test.ExpectedResult {
 			return TestsResult{
-				ResultCode:  enums.IncorrectAnswer,
+				ResultCode:  IncorrectAnswerCode,
 				Description: fmt.Sprintf("Test Failed: %d", test.ID),
 				Points:      points,
 			}, nil
 		}
+		points += test.Points
 	}
 
 	return TestsResult{
-		ResultCode:  enums.Succes,
-		Description: "",
-		Points:      points,
+		ResultCode: SuccesCode,
+		Points:     points,
 	}, err
 }
 
@@ -135,24 +147,22 @@ func runCompiledCodeWithInput(fileName string, input string, timeout time.Durati
 	fmt.Fprintln(stdin, input)
 
 	output, err := cmd.CombinedOutput()
-	if errors.Is(err, context.DeadlineExceeded) {
-		return "", TimeLimitError
-	}
-	if err != nil {
-		return string(output), fmt.Errorf("%w: %w", ProgramError, err)
+	outputString := *(*string)(unsafe.Pointer(&output))
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		if status, ok := exitErr.Sys().(syscall.WaitStatus); ok && status.Signaled() && status.Signal() == syscall.SIGKILL {
+			return "", TimeLimitError
+		}
+
+		return outputString, fmt.Errorf("%w: %s", ProgramError, err)
 	}
 
-	return strings.ReplaceAll(string(output), "\n", ""), nil
+	return strings.ReplaceAll(outputString, "\n", ""), nil
 }
-
-var (
-	ErrNotFound = errors.New("Not found in database")
-)
 
 func (s *TestService) GetTest(id int) (Test, error) {
 	test, err := s.testRepository.FindItemByID(id)
 	if err != nil {
-		if errors.Is(err, postgres.ErrNotFound) {
+		if errors.Is(err, storage.ErrNotFound) {
 			return Test{}, ErrNotFound
 		}
 		return Test{}, fmt.Errorf("In TestService(GetTest): %w", err)
@@ -160,8 +170,8 @@ func (s *TestService) GetTest(id int) (Test, error) {
 	return test, nil
 }
 
-func (s *TestService) AddTest(test Test) error {
-	err := s.testRepository.AddItem(test)
+func (s *TestService) AddTest(taskID int, input string, expectedResult string, points int) error {
+	err := s.testRepository.AddItem(taskID, input, expectedResult, points)
 	if err != nil {
 		return fmt.Errorf("In TestService(AddTest): %w", err)
 	}
@@ -179,7 +189,7 @@ func (s *TestService) DeleteTest(id int) error {
 func (s *TestService) UpdateTest(id int, newTest Test) error {
 	err := s.testRepository.UpdateItem(id, newTest)
 	if err != nil {
-		if errors.Is(err, postgres.ErrNotFound) {
+		if errors.Is(err, storage.ErrNotFound) {
 			return ErrNotFound
 		}
 		return fmt.Errorf("In TestService(UpdateTest): %w", err)

@@ -1,83 +1,57 @@
 package handlers
 
 import (
-	. "Contest/internal/domain"
-	"Contest/internal/enums"
-	"Contest/internal/services"
+	. "contest/internal/domain"
+	"contest/internal/services"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/gorilla/mux"
+	"log/slog"
 	"net/http"
 	"strconv"
 )
 
-type TestRequest struct {
-	TaskID   int            `json:"task_id,string"`
-	Language enums.Language `json:"language"`
-	Code     string         `json:"code"`
+type getTestsResponse struct {
+	Tests []testDTO `json:"tests"`
 }
 
-type TestResponse struct {
-	ResultCode  string `json:"result_code"`
-	Description string `json:"description"`
-	Points      int    `json:"points,string"`
+type addTestRequest struct {
+	TaskID         int    `json:"taskID,string"`
+	Input          string `json:"input"`
+	ExpectedResult string `json:"expectedResult"`
+	Points         int    `json:"points,string"`
 }
 
-type GetTestsResponse struct {
-	Tests []Test `json:"tests"`
+type testDTO struct {
+	ID             int    `json:"id"`
+	TaskID         int    `json:"taskID"`
+	Input          string `json:"input"`
+	ExpectedResult string `json:"expectedResult"`
+	Points         int    `json:"points"`
 }
 
-func RunTest(testService services.ITestService) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var request TestRequest
-		decoder := json.NewDecoder(r.Body)
-		if err := decoder.Decode(&request); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		result, err := testService.RunTest(request.TaskID, request.Language, request.Code)
-		if err != nil && !errors.Is(err, services.DeleteFileError) {
-			if errors.Is(err, services.UnknownLanguage) {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-			}
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		if errors.Is(err, services.DeleteFileError) {
-			fmt.Printf("File Not Deleted: %w", err)
-		}
-
-		response, err := json.Marshal(&TestResponse{
-			ResultCode:  string(result.ResultCode),
-			Description: result.Description,
-			Points:      result.Points,
-		})
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(response)
+func testsToTestsDTO(tests []Test) []testDTO {
+	res := make([]testDTO, len(tests))
+	for i, test := range tests {
+		res[i] = testDTO(test)
 	}
+	return res
 }
 
-func AddTest(testService services.ITestService) http.HandlerFunc {
+func AddTest(testService services.ITestService, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var test Test
-		decoder := json.NewDecoder(r.Body)
-		if err := decoder.Decode(&test); err != nil {
+		defer r.Body.Close()
+
+		var test addTestRequest
+		if err := json.NewDecoder(r.Body).Decode(&test); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-			fmt.Println(err.Error())
+			log.Error(err.Error())
 			return
 		}
 
-		if err := testService.AddTest(test); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			fmt.Println(err.Error())
+		if err := testService.AddTest(test.TaskID, test.Input, test.ExpectedResult, test.Points); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Error(err.Error())
 			return
 		}
 
@@ -85,19 +59,20 @@ func AddTest(testService services.ITestService) http.HandlerFunc {
 	}
 }
 
-func DeleteTest(testService services.ITestService) http.HandlerFunc {
+func DeleteTest(testService services.ITestService, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
 		id, err := strconv.Atoi(mux.Vars(r)["id"])
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-			fmt.Println(err.Error())
 			return
 		}
 
 		err = testService.DeleteTest(id)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			fmt.Println(err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Error(err.Error())
 			return
 		}
 
@@ -105,27 +80,26 @@ func DeleteTest(testService services.ITestService) http.HandlerFunc {
 	}
 }
 
-func UpdateTest(testService services.ITestService) http.HandlerFunc {
+func UpdateTest(testService services.ITestService, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
 		id, err := strconv.Atoi(mux.Vars(r)["id"])
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-			fmt.Println(err.Error())
 			return
 		}
 
-		var test Test
-		decoder := json.NewDecoder(r.Body)
-		if err := decoder.Decode(&test); err != nil {
+		var testDTO testDTO
+		if err := json.NewDecoder(r.Body).Decode(&testDTO); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-			fmt.Println(err.Error())
 			return
 		}
 
-		err = testService.UpdateTest(id, test)
+		err = testService.UpdateTest(id, Test(testDTO))
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			fmt.Println(err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Error(err.Error())
 			return
 		}
 
@@ -133,31 +107,33 @@ func UpdateTest(testService services.ITestService) http.HandlerFunc {
 	}
 }
 
-func GetTest(testService services.ITestService) http.HandlerFunc {
+func GetTest(testService services.ITestService, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
 		id, err := strconv.Atoi(mux.Vars(r)["id"])
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-			fmt.Println(err.Error())
 			return
 		}
 
 		test, err := testService.GetTest(id)
 		if err != nil {
-			fmt.Println(err.Error())
+			log.Error(err.Error())
 
 			if errors.Is(err, services.ErrNotFound) {
 				http.Error(w, err.Error(), http.StatusNotFound)
 				return
 			}
+			w.WriteHeader(http.StatusInternalServerError)
 
-			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		response, err := json.Marshal(test)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Error(err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
@@ -166,18 +142,23 @@ func GetTest(testService services.ITestService) http.HandlerFunc {
 	}
 }
 
-func GetTests(testService services.ITestService) http.HandlerFunc {
+func GetTests(testService services.ITestService, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
 		tests, err := testService.GetTests()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			fmt.Println(err.Error())
+			log.Error(err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
-		response, err := json.Marshal(tests)
+		response, err := json.Marshal(getTestsResponse{
+			Tests: testsToTestsDTO(tests),
+		})
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Error(err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
@@ -186,25 +167,29 @@ func GetTests(testService services.ITestService) http.HandlerFunc {
 	}
 }
 
-func GetTestsByTaskID(testService services.ITestService) http.HandlerFunc {
+func GetTestsByTaskID(testService services.ITestService, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
 		taskID, err := strconv.Atoi(mux.Vars(r)["task_id"])
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-			fmt.Println(err.Error())
 			return
 		}
 
 		tests, err := testService.GetTestsByTaskID(taskID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			fmt.Println(err.Error())
+			log.Error(err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
-		response, err := json.Marshal(tests)
+		response, err := json.Marshal(getTestsResponse{
+			Tests: testsToTestsDTO(tests),
+		})
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Error(err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 

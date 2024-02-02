@@ -5,8 +5,8 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"log"
 	"os"
-	"time"
 )
 
 type MigrationsConfig struct {
@@ -15,23 +15,26 @@ type MigrationsConfig struct {
 }
 
 func main() {
-	logFile, _ := os.Create("logs" + time.Now().String())
+	logFile, err := os.OpenFile("migrations_logs", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer logFile.Close()
+
+	logFile.WriteString("Запуск мигратора\n")
 
 	configFile, err := os.Open("cmd/migrator/config/migrations_config.json")
 	if err != nil {
-		logFile.WriteString(err.Error())
+		logFile.WriteString(err.Error() + "\n")
 		panic(err.Error())
 	}
 
 	var cfg MigrationsConfig
 	decoder := json.NewDecoder(configFile)
 	if err := decoder.Decode(&cfg); err != nil {
-		logFile.WriteString(err.Error())
+		logFile.WriteString(err.Error() + "\n")
 		panic(err.Error())
 	}
-
-	logFile.WriteString("Конфигурация завершена")
 
 	m, err := migrate.New(
 		"file://"+cfg.MigrationsPath,
@@ -39,14 +42,13 @@ func main() {
 	)
 	defer m.Close()
 	if err != nil {
-		logFile.WriteString(err.Error())
+		logFile.WriteString(err.Error() + "\n")
 		panic(err.Error())
 	}
-	logFile.WriteString("КНачало миграции")
+	logFile.WriteString("Начало миграции\n")
 
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		logFile.WriteString(err.Error())
+		logFile.WriteString(err.Error() + "\n")
 		panic(err.Error())
 	}
-	logFile.WriteString("Миграция завершена")
 }

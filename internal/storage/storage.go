@@ -1,14 +1,17 @@
 package storage
 
 import (
-	"Contest/internal/domain"
-	"Contest/internal/storage/postgres"
+	"contest/internal/domain"
 	"database/sql"
-	_ "github.com/lib/pq"
+	"errors"
+)
+
+var (
+	ErrNotFound = errors.New("Not Found")
 )
 
 type Repository[T any] interface {
-	AddItem(item T) error
+	AddItem(taskID int, input string, expectedResult string, points int) error
 	DeleteItem(id int) error
 	UpdateItem(id int, newItem T) error
 	GetTable() ([]T, error)
@@ -18,20 +21,6 @@ type Repository[T any] interface {
 }
 
 type Storage struct {
-	db             *sql.DB
+	DB             *sql.DB
 	TestRepository Repository[domain.Test]
-}
-
-func NewStorage(connStr string) (*Storage, error) {
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		return nil, err
-	}
-
-	testRepository := postgres.NewTestRepository(db)
-
-	return &Storage{
-		db:             db,
-		TestRepository: testRepository,
-	}, nil
 }
