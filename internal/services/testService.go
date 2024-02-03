@@ -60,6 +60,12 @@ func (s *TestService) RunTest(request RunTestRequest) (TestsResult, error) {
 		return TestsResult{}, fmt.Errorf("%w: %s", UnknownLanguageError, request.Language)
 	}
 	if err != nil {
+		if errors.Is(err, compiler.ErrCompile) {
+			return TestsResult{
+				ResultCode:  CompileErrorCode,
+				Description: err.Error(),
+			}, nil
+		}
 		return TestsResult{}, fmt.Errorf("In TestService(RunTest): %w", err)
 	}
 
