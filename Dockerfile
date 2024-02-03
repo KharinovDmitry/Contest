@@ -7,6 +7,7 @@ COPY ./ ./
 
 RUN go mod download && \
     go build -o migrations ./cmd/migrator/main.go && \
-    go build -o contest-app ./cmd/main.go
+    go build -o contest-app ./cmd/main.go && \
+    chmod +x entrypoint.sh
 
-CMD ["./migrations && ./contest-app"]
+ENTRYPOINT ["./entrypoint.sh"]
