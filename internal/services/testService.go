@@ -59,6 +59,8 @@ func (s *TestService) RunTest(taskID int, language Language, code string) (Tests
 	switch language {
 	case CPP:
 		fileName, err = s.compileService.CompileCPP(code)
+	case Python:
+		fileName, err = s.compileService.CompilePython(code)
 	default:
 		return TestsResult{}, fmt.Errorf("%w: %s", UnknownLanguageError, language)
 	}

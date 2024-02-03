@@ -10,4 +10,5 @@ var (
 
 type Compiler interface {
 	CompileCPP(code string) (fileName string, err error)
+	CompilePython(code string) (fileName string, err error)
 }
