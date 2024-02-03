@@ -16,11 +16,6 @@ import (
 	"unsafe"
 )
 
-const (
-	memoryLimitInKB = 1024
-	timeLimit       = 1 * time.Second
-)
-
 var (
 	ProgramError         = errors.New("Program error")
 	TimeLimitError       = errors.New("Time limit error")
@@ -30,7 +25,7 @@ var (
 )
 
 type ITestService interface {
-	RunTest(taskID int, language Language, code string) (TestsResult, error)
+	RunTest(request RunTestRequest) (TestsResult, error)
 	GetTest(id int) (Test, error)
 	AddTest(taskID int, input string, expectedResult string, points int) error
 	DeleteTest(id int) error
@@ -52,26 +47,26 @@ func NewTestService(compileService compiler.Compiler, testRepository storage.Tes
 	}
 }
 
-func (s *TestService) RunTest(taskID int, language Language, code string) (TestsResult, error) {
+func (s *TestService) RunTest(request RunTestRequest) (TestsResult, error) {
 	var fileName string
 	var err error
 
-	switch language {
+	switch request.Language {
 	case CPP:
-		fileName, err = s.compileService.CompileCPP(code)
+		fileName, err = s.compileService.CompileCPP(request.Code)
 	case Python:
-		fileName, err = s.compileService.CompilePython(code)
+		fileName, err = s.compileService.CompilePython(request.Code)
 	default:
-		return TestsResult{}, fmt.Errorf("%w: %s", UnknownLanguageError, language)
+		return TestsResult{}, fmt.Errorf("%w: %s", UnknownLanguageError, request.Language)
 	}
 	if err != nil {
 		return TestsResult{}, fmt.Errorf("In TestService(RunTest): %w", err)
 	}
 
-	return s.RunTestOnFile(fileName, taskID, true)
+	return s.RunTestOnFile(fileName, request.TaskID, request.MemoryLimitInKb, request.TimeLimitInMs, true)
 }
 
-func (s *TestService) RunTestOnFile(fileName string, taskID int, deleteAfter bool) (TestsResult, error) {
+func (s *TestService) RunTestOnFile(fileName string, taskID int, memoryLimitInKb int, timeLimitInMs int, deleteAfter bool) (TestsResult, error) {
 	file, err := os.Open(fileName)
 	if deleteAfter {
 		defer func() {
@@ -95,11 +90,11 @@ func (s *TestService) RunTestOnFile(fileName string, taskID int, deleteAfter boo
 		return TestsResult{}, TestsNotFoundError
 	}
 
+	timeout := time.Duration(timeLimitInMs) * time.Millisecond
+
 	var points int
 	for _, test := range tests {
-		timeout := timeLimit
-		maxMemoryKB := memoryLimitInKB
-		output, err := runCompiledCodeWithInput(fileName, test.Input, timeout, maxMemoryKB)
+		output, err := runCompiledCodeWithInput(fileName, test.Input, timeout, memoryLimitInKb)
 		if err != nil {
 			if errors.Is(err, TimeLimitError) {
 				return TestsResult{

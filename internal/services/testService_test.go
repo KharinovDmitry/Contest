@@ -45,7 +45,7 @@ func TestSucces(t *testing.T) {
 	testRepo := InitMockRepo(cntrl)
 	testService := NewTestService(compiler, testRepo)
 
-	actual, err := testService.RunTestOnFile("testFiles/testSucces", 1, false)
+	actual, err := testService.RunTestOnFile("testFiles/testSucces", 1, 1024, 1000, false)
 	expected := domain.TestsResult{
 		ResultCode:  domain.SuccesCode,
 		Description: "",
@@ -62,7 +62,7 @@ func TestTimeLimit(t *testing.T) {
 	testRepo := InitMockRepo(cntrl)
 	testService := NewTestService(compiler, testRepo)
 
-	actual, err := testService.RunTestOnFile("testFiles/testTimeLimit", 1, false)
+	actual, err := testService.RunTestOnFile("testFiles/testTimeLimit", 1, 1024, 1000, false)
 	expected := domain.TestsResult{
 		ResultCode:  domain.TimeLimitCode,
 		Description: "",
@@ -79,7 +79,7 @@ func TestNotFullSolution(t *testing.T) {
 	testRepo := InitMockRepo(cntrl)
 	testService := NewTestService(compiler, testRepo)
 
-	actual, err := testService.RunTestOnFile("testFiles/testNotFullSolution", 1, false)
+	actual, err := testService.RunTestOnFile("testFiles/testNotFullSolution", 1, 1024, 1000, false)
 	expected := domain.TestsResult{
 		ResultCode:  domain.IncorrectAnswerCode,
 		Description: "Test Failed: 2",
@@ -96,7 +96,7 @@ func TestRuntimeError(t *testing.T) {
 	testRepo := InitMockRepo(cntrl)
 	testService := NewTestService(compiler, testRepo)
 
-	actual, err := testService.RunTestOnFile("testFiles/testRuntimeError", 1, false)
+	actual, err := testService.RunTestOnFile("testFiles/testRuntimeError", 1, 1024, 1000, false)
 	expected := domain.TestsResult{
 		ResultCode:  domain.RuntimeErrorCode,
 		Description: "Error Info: Program error: signal: segmentation fault (core dumped) Output: ",

@@ -10,9 +10,11 @@ import (
 )
 
 type runTestRequest struct {
-	TaskID   int      `json:"task_id,string"`
-	Language Language `json:"language"`
-	Code     string   `json:"code"`
+	TaskID          int      `json:"task_id,string"`
+	Language        Language `json:"language"`
+	Code            string   `json:"code"`
+	MemoryLimitInKb int      `json:"memoryLimitInMs,string"`
+	TimeLimitInMs   int      `json:"timeLimitInKb,string"`
 }
 
 type runTestResponse struct {
@@ -32,7 +34,7 @@ func RunTest(testService services.ITestService, log *slog.Logger) http.HandlerFu
 			return
 		}
 
-		result, err := testService.RunTest(request.TaskID, request.Language, request.Code)
+		result, err := testService.RunTest(RunTestRequest(request))
 		if err != nil {
 			if errors.Is(err, services.UnknownLanguageError) {
 				http.Error(w, err.Error(), http.StatusBadRequest)

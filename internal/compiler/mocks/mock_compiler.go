@@ -47,3 +47,18 @@ func (mr *MockCompilerMockRecorder) CompileCPP(code interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompileCPP", reflect.TypeOf((*MockCompiler)(nil).CompileCPP), code)
 }
+
+// CompilePython mocks base method.
+func (m *MockCompiler) CompilePython(code string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CompilePython", code)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CompilePython indicates an expected call of CompilePython.
+func (mr *MockCompilerMockRecorder) CompilePython(code interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompilePython", reflect.TypeOf((*MockCompiler)(nil).CompilePython), code)
+}
