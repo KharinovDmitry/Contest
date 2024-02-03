@@ -1,14 +1,48 @@
 package services
 
 import (
+	"contest/internal/compiler/mocks"
 	"contest/internal/domain"
+	mock_storage "contest/internal/storage/mocks"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
+func InitMockRepo(cntrl *gomock.Controller) *mock_storage.MockTestRepository {
+	testRepo := mock_storage.NewMockTestRepository(cntrl)
+
+	testRepo.EXPECT().FindTestsByTaskID(1).Return([]domain.Test{
+		domain.Test{
+			ID:             1,
+			TaskID:         1,
+			Input:          "1",
+			ExpectedResult: "1",
+			Points:         1,
+		},
+		domain.Test{
+			ID:             2,
+			TaskID:         1,
+			Input:          "2",
+			ExpectedResult: "4",
+			Points:         1,
+		},
+		domain.Test{
+			ID:             2,
+			TaskID:         1,
+			Input:          "3",
+			ExpectedResult: "9",
+			Points:         1,
+		},
+	}, nil)
+
+	return testRepo
+}
+
 func TestSucces(t *testing.T) {
-	compiler := mocks.MockCompiler{}
-	testRepo := mocks.MockTestRepository{}
+	cntrl := gomock.NewController(t)
+	compiler := mock_compiler.NewMockCompiler(cntrl)
+	testRepo := InitMockRepo(cntrl)
 	testService := NewTestService(compiler, testRepo)
 
 	actual, err := testService.RunTestOnFile("testFiles/testSucces", 1, false)
@@ -23,8 +57,9 @@ func TestSucces(t *testing.T) {
 }
 
 func TestTimeLimit(t *testing.T) {
-	compiler := mocks.MockCompiler{}
-	testRepo := mocks.MockTestRepository{}
+	cntrl := gomock.NewController(t)
+	compiler := mock_compiler.NewMockCompiler(cntrl)
+	testRepo := InitMockRepo(cntrl)
 	testService := NewTestService(compiler, testRepo)
 
 	actual, err := testService.RunTestOnFile("testFiles/testTimeLimit", 1, false)
@@ -39,8 +74,9 @@ func TestTimeLimit(t *testing.T) {
 }
 
 func TestNotFullSolution(t *testing.T) {
-	compiler := mocks.MockCompiler{}
-	testRepo := mocks.MockTestRepository{}
+	cntrl := gomock.NewController(t)
+	compiler := mock_compiler.NewMockCompiler(cntrl)
+	testRepo := InitMockRepo(cntrl)
 	testService := NewTestService(compiler, testRepo)
 
 	actual, err := testService.RunTestOnFile("testFiles/testNotFullSolution", 1, false)
@@ -55,8 +91,9 @@ func TestNotFullSolution(t *testing.T) {
 }
 
 func TestRuntimeError(t *testing.T) {
-	compiler := mocks.MockCompiler{}
-	testRepo := mocks.MockTestRepository{}
+	cntrl := gomock.NewController(t)
+	compiler := mock_compiler.NewMockCompiler(cntrl)
+	testRepo := InitMockRepo(cntrl)
 	testService := NewTestService(compiler, testRepo)
 
 	actual, err := testService.RunTestOnFile("testFiles/testRuntimeError", 1, false)

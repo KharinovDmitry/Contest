@@ -84,9 +84,7 @@ func (s *TestService) RunTestOnFile(fileName string, taskID int, deleteAfter boo
 		return TestsResult{}, fmt.Errorf("In TestService(RunTestOnFile): %w", err)
 	}
 
-	tests, err := s.testRepository.FindTestsByCondition(func(item Test) bool {
-		return item.TaskID == taskID
-	})
+	tests, err := s.testRepository.FindTestsByTaskID(taskID)
 	if err != nil {
 		return TestsResult{}, fmt.Errorf("In TestService(RunTestOnFile'): %w", err)
 	}
