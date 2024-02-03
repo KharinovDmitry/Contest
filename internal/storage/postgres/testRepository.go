@@ -18,7 +18,7 @@ func NewTestRepository(db *sql.DB) *TestRepository {
 	return &TestRepository{db: db}
 }
 
-func (r *TestRepository) AddItem(taskID int, input string, expectedResult string, points int) error {
+func (r *TestRepository) AddTest(taskID int, input string, expectedResult string, points int) error {
 	_, err := r.db.Exec("INSERT INTO tests(task_id, input, expected_result, points) VALUES ($1, $2, $3, $4)",
 		taskID, input, expectedResult, points)
 	if err != nil {
@@ -27,7 +27,7 @@ func (r *TestRepository) AddItem(taskID int, input string, expectedResult string
 	return err
 }
 
-func (r *TestRepository) DeleteItem(id int) error {
+func (r *TestRepository) DeleteTest(id int) error {
 	rows, err := r.db.Exec("DELETE from tests where id=$1", id)
 	if err != nil {
 		err = fmt.Errorf("In TestRepository(DeleteItem): %w", err)
@@ -43,7 +43,7 @@ func (r *TestRepository) DeleteItem(id int) error {
 	return nil
 }
 
-func (r *TestRepository) UpdateItem(id int, newItem Test) error {
+func (r *TestRepository) UpdateTest(id int, newItem Test) error {
 	_, err := r.db.Exec("UPDATE tests SET id=$1,task_id=$2, input=$3, expected_result=$4, points=$5 WHERE id=$6",
 		newItem.ID, newItem.TaskID, newItem.Input, newItem.ExpectedResult, newItem.Points, id)
 	if err != nil {
@@ -56,7 +56,7 @@ func (r *TestRepository) UpdateItem(id int, newItem Test) error {
 	return nil
 }
 
-func (r *TestRepository) GetTable() ([]Test, error) {
+func (r *TestRepository) GetTests() ([]Test, error) {
 	rows, err := r.db.Query("SELECT id, task_id, input, expected_result, points FROM tests")
 	if err != nil {
 		return nil, fmt.Errorf("In TestRepository(GetTable): %w", err)
@@ -75,7 +75,7 @@ func (r *TestRepository) GetTable() ([]Test, error) {
 	return tests, nil
 }
 
-func (r *TestRepository) FindItemByID(id int) (Test, error) {
+func (r *TestRepository) FindTestByID(id int) (Test, error) {
 	row := r.db.QueryRow("SELECT id, task_id, input, expected_result, points FROM tests WHERE id = $1", id)
 	var test Test
 	err := row.Scan(&test.ID, &test.TaskID, &test.Input, &test.ExpectedResult, &test.Points)
@@ -88,8 +88,27 @@ func (r *TestRepository) FindItemByID(id int) (Test, error) {
 	return test, err
 }
 
-func (r *TestRepository) FindItemByCondition(condition func(item Test) bool) (Test, error) {
-	items, err := r.FindItemsByCondition(condition)
+func (r *TestRepository) FindTestsByTaskID(taskID int) ([]Test, error) {
+	rows, err := r.db.Query("SELECT id, task_id, input, expected_result, points FROM tests WHERE task_id = $1", taskID)
+	if err != nil {
+		return nil, fmt.Errorf("In TestRepository(GetTable): %w", err)
+	}
+	defer rows.Close()
+
+	var tests []Test
+	for rows.Next() {
+		var test Test
+		err = rows.Scan(&test.ID, &test.TaskID, &test.Input, &test.ExpectedResult, &test.Points)
+		if err != nil {
+			return nil, fmt.Errorf("In TestRepository(GetTable): %w", err)
+		}
+		tests = append(tests, test)
+	}
+	return tests, nil
+}
+
+func (r *TestRepository) FindTestByCondition(condition func(item Test) bool) (Test, error) {
+	items, err := r.FindTestsByCondition(condition)
 	if err != nil {
 		return Test{}, fmt.Errorf("In TestRepository(FindItemByCondition): %w", err)
 	}
@@ -99,8 +118,8 @@ func (r *TestRepository) FindItemByCondition(condition func(item Test) bool) (Te
 	return items[0], nil
 }
 
-func (r *TestRepository) FindItemsByCondition(condition func(item Test) bool) ([]Test, error) {
-	table, err := r.GetTable()
+func (r *TestRepository) FindTestsByCondition(condition func(item Test) bool) ([]Test, error) {
+	table, err := r.GetTests()
 	if err != nil {
 		return nil, fmt.Errorf("In TestRepository(FindItemsByCondition): %w", err)
 	}

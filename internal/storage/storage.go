@@ -10,17 +10,18 @@ var (
 	ErrNotFound = errors.New("Not Found")
 )
 
-type Repository[T any] interface {
-	AddItem(taskID int, input string, expectedResult string, points int) error
-	DeleteItem(id int) error
-	UpdateItem(id int, newItem T) error
-	GetTable() ([]T, error)
-	FindItemByID(id int) (T, error)
-	FindItemByCondition(condition func(item T) bool) (T, error)
-	FindItemsByCondition(condition func(item T) bool) ([]T, error)
+type TestRepository interface {
+	AddTest(taskID int, input string, expectedResult string, points int) error
+	DeleteTest(id int) error
+	UpdateTest(id int, newItem domain.Test) error
+	GetTests() ([]domain.Test, error)
+	FindTestByID(id int) (domain.Test, error)
+	FindTestsByTaskID(taskID int) ([]domain.Test, error)
+	FindTestByCondition(condition func(item domain.Test) bool) (domain.Test, error)
+	FindTestsByCondition(condition func(item domain.Test) bool) ([]domain.Test, error)
 }
 
 type Storage struct {
 	DB             *sql.DB
-	TestRepository Repository[domain.Test]
+	TestRepository TestRepository
 }

@@ -42,10 +42,10 @@ type ITestService interface {
 type TestService struct {
 	logger         *slog.Logger
 	compileService compiler.Compiler
-	testRepository storage.Repository[Test]
+	testRepository storage.TestRepository
 }
 
-func NewTestService(compileService compiler.Compiler, testRepository storage.Repository[Test]) *TestService {
+func NewTestService(compileService compiler.Compiler, testRepository storage.TestRepository) *TestService {
 	return &TestService{
 		compileService: compileService,
 		testRepository: testRepository,
@@ -84,7 +84,7 @@ func (s *TestService) RunTestOnFile(fileName string, taskID int, deleteAfter boo
 		return TestsResult{}, fmt.Errorf("In TestService(RunTestOnFile): %w", err)
 	}
 
-	tests, err := s.testRepository.FindItemsByCondition(func(item Test) bool {
+	tests, err := s.testRepository.FindTestsByCondition(func(item Test) bool {
 		return item.TaskID == taskID
 	})
 	if err != nil {
@@ -160,7 +160,7 @@ func runCompiledCodeWithInput(fileName string, input string, timeout time.Durati
 }
 
 func (s *TestService) GetTest(id int) (Test, error) {
-	test, err := s.testRepository.FindItemByID(id)
+	test, err := s.testRepository.FindTestByID(id)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			return Test{}, ErrNotFound
@@ -171,7 +171,7 @@ func (s *TestService) GetTest(id int) (Test, error) {
 }
 
 func (s *TestService) AddTest(taskID int, input string, expectedResult string, points int) error {
-	err := s.testRepository.AddItem(taskID, input, expectedResult, points)
+	err := s.testRepository.AddTest(taskID, input, expectedResult, points)
 	if err != nil {
 		return fmt.Errorf("In TestService(AddTest): %w", err)
 	}
@@ -179,7 +179,7 @@ func (s *TestService) AddTest(taskID int, input string, expectedResult string, p
 }
 
 func (s *TestService) DeleteTest(id int) error {
-	err := s.testRepository.DeleteItem(id)
+	err := s.testRepository.DeleteTest(id)
 	if err != nil {
 		return fmt.Errorf("In TestService(DeleteTest): %w", err)
 	}
@@ -187,7 +187,7 @@ func (s *TestService) DeleteTest(id int) error {
 }
 
 func (s *TestService) UpdateTest(id int, newTest Test) error {
-	err := s.testRepository.UpdateItem(id, newTest)
+	err := s.testRepository.UpdateTest(id, newTest)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			return ErrNotFound
@@ -198,7 +198,7 @@ func (s *TestService) UpdateTest(id int, newTest Test) error {
 }
 
 func (s *TestService) GetTests() ([]Test, error) {
-	tests, err := s.testRepository.GetTable()
+	tests, err := s.testRepository.GetTests()
 	if err != nil {
 		return nil, fmt.Errorf("In TestService(GetTests): %w", err)
 	}
@@ -206,10 +206,7 @@ func (s *TestService) GetTests() ([]Test, error) {
 }
 
 func (s *TestService) GetTestsByTaskID(taskID int) ([]Test, error) {
-	tests, err := s.testRepository.FindItemsByCondition(
-		func(item Test) bool {
-			return item.TaskID == taskID
-		})
+	tests, err := s.testRepository.FindTestsByTaskID(taskID)
 	if err != nil {
 		return nil, fmt.Errorf("In TestService(GetTestsByTaskID): %w", err)
 	}
