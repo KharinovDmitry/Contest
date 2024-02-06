@@ -2,7 +2,7 @@ package handlers
 
 import (
 	. "contest/internal/domain"
-	"contest/internal/services"
+	"contest/internal/executors"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -17,13 +17,17 @@ type runTestRequest struct {
 	TimeLimitInMs   int      `json:"timeLimitInKb,string"`
 }
 
+type IRunTestService interface {
+	RunTest(taskID int, language Language, code string, memoryLimitInKb int, timeLimitInMs int) (TestsResult, error)
+}
+
 type runTestResponse struct {
 	ResultCode  string `json:"result_code"`
 	Description string `json:"description"`
 	Points      int    `json:"points,string"`
 }
 
-func RunTest(testService services.ITestService, log *slog.Logger) http.HandlerFunc {
+func RunTest(testService IRunTestService, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		log.Info("RunTest request received")
@@ -34,9 +38,9 @@ func RunTest(testService services.ITestService, log *slog.Logger) http.HandlerFu
 			return
 		}
 
-		result, err := testService.RunTest(RunTestRequest(request))
+		result, err := testService.RunTest(request.TaskID, request.Language, request.Code, request.MemoryLimitInKb, request.TimeLimitInMs)
 		if err != nil {
-			if errors.Is(err, services.UnknownLanguageError) {
+			if errors.Is(err, executors.ErrUnknownLanguage) {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 			}
 			log.Error(err.Error())

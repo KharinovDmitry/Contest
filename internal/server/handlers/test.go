@@ -2,7 +2,7 @@ package handlers
 
 import (
 	. "contest/internal/domain"
-	"contest/internal/services"
+	"contest/internal/services/testCrudService"
 	"encoding/json"
 	"errors"
 	"github.com/gorilla/mux"
@@ -10,6 +10,15 @@ import (
 	"net/http"
 	"strconv"
 )
+
+type ITestCrudService interface {
+	GetTest(id int) (Test, error)
+	AddTest(taskID int, input string, expectedResult string, points int) error
+	DeleteTest(id int) error
+	UpdateTest(id int, newTest Test) error
+	GetTests() ([]Test, error)
+	GetTestsByTaskID(taskID int) ([]Test, error)
+}
 
 type getTestsResponse struct {
 	Tests []testDTO `json:"tests"`
@@ -38,7 +47,7 @@ func testsToTestsDTO(tests []Test) []testDTO {
 	return res
 }
 
-func AddTest(testService services.ITestService, log *slog.Logger) http.HandlerFunc {
+func AddTest(testService ITestCrudService, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
@@ -59,7 +68,7 @@ func AddTest(testService services.ITestService, log *slog.Logger) http.HandlerFu
 	}
 }
 
-func DeleteTest(testService services.ITestService, log *slog.Logger) http.HandlerFunc {
+func DeleteTest(testService ITestCrudService, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
@@ -80,7 +89,7 @@ func DeleteTest(testService services.ITestService, log *slog.Logger) http.Handle
 	}
 }
 
-func UpdateTest(testService services.ITestService, log *slog.Logger) http.HandlerFunc {
+func UpdateTest(testService ITestCrudService, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
@@ -107,7 +116,7 @@ func UpdateTest(testService services.ITestService, log *slog.Logger) http.Handle
 	}
 }
 
-func GetTest(testService services.ITestService, log *slog.Logger) http.HandlerFunc {
+func GetTest(testService ITestCrudService, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
@@ -121,7 +130,7 @@ func GetTest(testService services.ITestService, log *slog.Logger) http.HandlerFu
 		if err != nil {
 			log.Error(err.Error())
 
-			if errors.Is(err, services.ErrNotFound) {
+			if errors.Is(err, testCrudService.ErrNotFound) {
 				http.Error(w, err.Error(), http.StatusNotFound)
 				return
 			}
@@ -142,7 +151,7 @@ func GetTest(testService services.ITestService, log *slog.Logger) http.HandlerFu
 	}
 }
 
-func GetTests(testService services.ITestService, log *slog.Logger) http.HandlerFunc {
+func GetTests(testService ITestCrudService, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
@@ -167,7 +176,7 @@ func GetTests(testService services.ITestService, log *slog.Logger) http.HandlerF
 	}
 }
 
-func GetTestsByTaskID(testService services.ITestService, log *slog.Logger) http.HandlerFunc {
+func GetTestsByTaskID(testService ITestCrudService, log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 

@@ -1,12 +1,12 @@
 package app
 
 import (
-	"contest/internal/compiler"
-	"contest/internal/compiler/linux"
 	"contest/internal/config"
+	"contest/internal/executors/linux"
 	"contest/internal/server/handlers"
 	"contest/internal/server/middleware"
-	"contest/internal/services"
+	"contest/internal/services/runTestService"
+	"contest/internal/services/testCrudService"
 	"contest/internal/storage"
 	"contest/internal/storage/postgres"
 	"errors"
@@ -18,12 +18,13 @@ import (
 )
 
 type App struct {
-	port        int
-	router      *mux.Router
-	store       *storage.Storage
-	logger      *slog.Logger
-	compiler    compiler.Compiler
-	testService services.ITestService
+	port            int
+	router          *mux.Router
+	store           *storage.Storage
+	logger          *slog.Logger
+	testCrudService handlers.ITestCrudService
+	runTestService  handlers.IRunTestService
+	executorFactory runTestService.IExecutorFactory
 }
 
 func New(cfg *config.Config) *App {
@@ -41,16 +42,19 @@ func New(cfg *config.Config) *App {
 		panic(err)
 	}
 
-	linuxCompiler := linux.NewLinuxCompiler()
-	testService := services.NewTestService(linuxCompiler, store.TestRepository)
+	executorFactory := linux.NewExecutorFactory()
+
+	runTestService := runTestService.NewRunTestService(executorFactory, store.TestRepository)
+	testCrudService := testCrudService.NewTestCrudService(store.TestRepository)
 
 	app := &App{
-		port:        cfg.Port,
-		router:      router,
-		store:       store,
-		logger:      logger,
-		compiler:    linuxCompiler,
-		testService: testService,
+		port:            cfg.Port,
+		router:          router,
+		store:           store,
+		logger:          logger,
+		runTestService:  runTestService,
+		testCrudService: testCrudService,
+		executorFactory: executorFactory,
 	}
 	app.setupRouter()
 
@@ -59,15 +63,16 @@ func New(cfg *config.Config) *App {
 }
 
 func (a *App) setupRouter() {
-	a.router.HandleFunc("/test", handlers.RunTest(a.testService, a.logger)).Methods("GET")
+	a.router.HandleFunc("/test", handlers.RunTest(a.runTestService, a.logger)).Methods("GET")
 
 	crudSubrouter := a.router.PathPrefix("/crud").Subrouter()
-	crudSubrouter.HandleFunc("/test", handlers.AddTest(a.testService, a.logger)).Methods("PUT")
-	crudSubrouter.HandleFunc("/test/{id}", handlers.DeleteTest(a.testService, a.logger)).Methods("DELETE")
-	crudSubrouter.HandleFunc("/test/{id}", handlers.UpdateTest(a.testService, a.logger)).Methods("PATCH")
-	crudSubrouter.HandleFunc("/test/{id}", handlers.GetTest(a.testService, a.logger)).Methods("GET")
-	crudSubrouter.HandleFunc("/tests", handlers.GetTests(a.testService, a.logger)).Methods("GET")
-	crudSubrouter.HandleFunc("/tests/{task_id}", handlers.GetTestsByTaskID(a.testService, a.logger)).Methods("GET")
+	crudSubrouter.HandleFunc("/test", handlers.AddTest(a.testCrudService, a.logger)).Methods("PUT")
+	crudSubrouter.HandleFunc("/test/{id}", handlers.DeleteTest(a.testCrudService, a.logger)).Methods("DELETE")
+	crudSubrouter.HandleFunc("/test/{id}", handlers.UpdateTest(a.testCrudService, a.logger)).Methods("PATCH")
+	crudSubrouter.HandleFunc("/test/{id}", handlers.GetTest(a.testCrudService, a.logger)).Methods("GET")
+
+	crudSubrouter.HandleFunc("/tests", handlers.GetTests(a.testCrudService, a.logger)).Methods("GET")
+	crudSubrouter.HandleFunc("/tests/{task_id}", handlers.GetTestsByTaskID(a.testCrudService, a.logger)).Methods("GET")
 }
 
 func setupLogger(env string) (*slog.Logger, error) {
