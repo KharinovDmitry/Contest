@@ -1,7 +1,7 @@
 package runTestService
 
 import (
-	. "contest/internal/domain"
+	"contest/internal/domain"
 	"contest/internal/executors"
 	"contest/internal/services/testCrudService"
 	"contest/internal/storage"
@@ -16,7 +16,7 @@ type IExecutor interface {
 }
 
 type IExecutorFactory interface {
-	NewExecutor(code string, language Language) (IExecutor, error)
+	NewExecutor(code string, language domain.Language) (IExecutor, error)
 }
 
 type RunTestService struct {
@@ -31,20 +31,20 @@ func NewRunTestService(codeRunnerFactory IExecutorFactory, testRepository storag
 	}
 }
 
-func (s *RunTestService) RunTest(taskID int, language Language, code string, memoryLimitInKb int, timeLimitInMs int) (TestsResult, error) {
+func (s *RunTestService) RunTest(taskID int, language domain.Language, code string, memoryLimitInKb int, timeLimitInMs int) (domain.TestsResult, error) {
 	program, err := s.codeRunnerFactory.NewExecutor(code, language)
 	if err != nil {
-		return TestsResult{}, fmt.Errorf("In RunTestService(RunTest): %w", err)
+		return domain.TestsResult{}, fmt.Errorf("In RunTestService(RunTest): %w", err)
 	}
 	defer program.Close()
 
 	tests, err := s.testRepository.FindTestsByTaskID(taskID)
 	if err != nil {
-		return TestsResult{}, fmt.Errorf("In RunTestService(RunTest): %w", err)
+		return domain.TestsResult{}, fmt.Errorf("In RunTestService(RunTest): %w", err)
 	}
 
 	if len(tests) == 0 {
-		return TestsResult{}, testCrudService.TestsNotFoundError
+		return domain.TestsResult{}, testCrudService.TestsNotFoundError
 	}
 
 	var points int
@@ -52,23 +52,23 @@ func (s *RunTestService) RunTest(taskID int, language Language, code string, mem
 		output, err := program.Execute(test.Input, memoryLimitInKb, timeLimitInMs)
 		if err != nil {
 			if errors.Is(err, executors.TimeLimitError) {
-				return TestsResult{
-					ResultCode: TimeLimitCode,
+				return domain.TestsResult{
+					ResultCode: domain.TimeLimitCode,
 					Points:     points,
 				}, nil
 			}
 			if errors.Is(err, executors.RuntimeError) {
-				return TestsResult{
-					ResultCode:  RuntimeErrorCode,
+				return domain.TestsResult{
+					ResultCode:  domain.RuntimeErrorCode,
 					Description: fmt.Sprintf("Error Info: %s Output: %s", err.Error(), output),
 					Points:      points,
 				}, nil
 			}
-			return TestsResult{}, fmt.Errorf("In TestService(RunTests): %w", err)
+			return domain.TestsResult{}, fmt.Errorf("In TestService(RunTests): %w", err)
 		}
 		if strings.Replace(output, "\n", "", 1) != test.ExpectedResult {
-			return TestsResult{
-				ResultCode:  IncorrectAnswerCode,
+			return domain.TestsResult{
+				ResultCode:  domain.IncorrectAnswerCode,
 				Description: fmt.Sprintf("Test Failed: %d Expected: %s Actual: %s", test.ID, test.ExpectedResult, output),
 				Points:      points,
 			}, nil
@@ -76,8 +76,8 @@ func (s *RunTestService) RunTest(taskID int, language Language, code string, mem
 		points += test.Points
 	}
 
-	return TestsResult{
-		ResultCode: SuccesCode,
+	return domain.TestsResult{
+		ResultCode: domain.SuccesCode,
 		Points:     points,
 	}, err
 }
